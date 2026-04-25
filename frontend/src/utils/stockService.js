@@ -1,89 +1,62 @@
 // stockService.js
+// Now points to our own FastAPI backend instead of Alpha Vantage directly
+// This is more secure, faster (cached), and ready for ML
+
 import axios from 'axios'
 
-const API_KEY = import.meta.env.VITE_ALPHA_VANTAGE_KEY
-const BASE_URL = 'https://www.alphavantage.co/query'
+// Our backend URL
+const BASE_URL = 'http://localhost:8000'
 
-export async function fetchStockHistory(ticker) {
+// ─────────────────────────────────────────
+// Fetch stock history + quote from our backend
+// ─────────────────────────────────────────
+export async function fetchStockHistory(ticker, period = '3mo') {
   try {
-    const response = await axios.get(BASE_URL, {
-      params: {
-        function: 'TIME_SERIES_DAILY',
-        symbol: ticker,
-        outputsize: 'compact',
-        apikey: API_KEY,
-      }
+    const response = await axios.get(`${BASE_URL}/stock/${ticker}`, {
+      params: { period }
     })
-
-    // ✅ Check for API limit message
-    if (response.data['Information']) {
-      throw new Error('API_LIMIT')
-    }
-
-    // ✅ Check for invalid ticker
-    if (response.data['Error Message']) {
-      throw new Error('INVALID_TICKER')
-    }
-
-    const timeSeries = response.data['Time Series (Daily)']
-    if (!timeSeries) {
-      throw new Error('NO_DATA')
-    }
-
-    const formatted = Object.entries(timeSeries)
-      .map(([date, values]) => ({
-        date,
-        open: parseFloat(values['1. open']),
-        high: parseFloat(values['2. high']),
-        low: parseFloat(values['3. low']),
-        close: parseFloat(values['4. close']),
-        volume: parseInt(values['5. volume']),
-      }))
-      .reverse()
-
-    return formatted
+    // Backend returns history array directly
+    return response.data.history
 
   } catch (error) {
-    throw error
+    if (error.response?.status === 404) {
+      throw new Error('INVALID_TICKER')
+    }
+    throw new Error('FETCH_ERROR')
   }
 }
 
 export async function fetchStockQuote(ticker) {
   try {
-    const response = await axios.get(BASE_URL, {
-      params: {
-        function: 'GLOBAL_QUOTE',
-        symbol: ticker,
-        apikey: API_KEY,
-      }
-    })
-
-    // ✅ Check for API limit message
-    if (response.data['Information']) {
-      throw new Error('API_LIMIT')
-    }
-
-    // ✅ Check for invalid ticker
-    if (response.data['Error Message']) {
-      throw new Error('INVALID_TICKER')
-    }
-
-    const quote = response.data['Global Quote']
-    if (!quote || !quote['05. price']) {
-      throw new Error('NO_DATA')
-    }
+    const response = await axios.get(`${BASE_URL}/stock/${ticker}`)
+    const data = response.data
 
     return {
-      ticker: quote['01. symbol'],
-      price: parseFloat(quote['05. price']).toFixed(2),
-      change: parseFloat(quote['09. change']).toFixed(2),
-      changePercent: quote['10. change percent'],
-      volume: parseInt(quote['06. volume']).toLocaleString(),
-      high: parseFloat(quote['03. high']).toFixed(2),
-      low: parseFloat(quote['04. low']).toFixed(2),
+      ticker: data.ticker,
+      price: data.price.toFixed(2),
+      change: data.change.toFixed(2),
+      changePercent: `${data.changePercent}%`,
+      volume: data.volume.toLocaleString(),
+      high: data.high.toFixed(2),
+      low: data.low.toFixed(2),
     }
 
   } catch (error) {
-    throw error
+    if (error.response?.status === 404) {
+      throw new Error('INVALID_TICKER')
+    }
+    throw new Error('FETCH_ERROR')
+  }
+}
+
+// ─────────────────────────────────────────
+// Fetch AI prediction from our backend
+// ─────────────────────────────────────────
+export async function fetchPrediction(ticker) {
+  try {
+    const response = await axios.get(`${BASE_URL}/predict/${ticker}`)
+    return response.data
+  } catch (error) {
+    throw new Error('PREDICTION_ERROR')
   }
 }
