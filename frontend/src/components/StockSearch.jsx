@@ -6,7 +6,7 @@ import { fetchStockHistory, fetchStockQuote } from '../utils/stockService'
 import PriceChart from './PriceChart'
 import StockInfo from './StockInfo'
 
-function StockSearch() {
+function StockSearch({ onTickerChange }) {
   const [ticker, setTicker] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -21,6 +21,7 @@ function StockSearch() {
     setError('')
     setChartData(null)
     setQuote(null)
+    onTickerChange(ticker.toUpperCase())
 
     try {
       // Fetch both at the same time (faster!)

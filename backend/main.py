@@ -1,28 +1,22 @@
 # main.py
-# This is the entry point of our FastAPI backend
-# Think of this as the "App.jsx" but for Python
+# QuantEdge FastAPI Backend — now with real ML predictions
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
-import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from ml_model import train_model, predict_next_price
 
 # ─────────────────────────────────────────
-# Initialize FastAPI app
+# Initialize app
 # ─────────────────────────────────────────
 app = FastAPI(
     title="QuantEdge API",
     description="AI-powered financial intelligence backend",
-    version="1.0.0"
+    version="2.0.0"
 )
 
-# ─────────────────────────────────────────
-# CORS Middleware
-# This allows our React frontend to talk to this backend
-# Without this, the browser will block all requests
-# ─────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:3000"],
@@ -32,16 +26,14 @@ app.add_middleware(
 )
 
 # ─────────────────────────────────────────
-# Simple in-memory cache
-# Stores recent API responses so we don't
-# fetch the same data multiple times
+# Cache — stores data and trained models
 # ─────────────────────────────────────────
 cache = {}
+model_cache = {}  # stores trained ML models
 CACHE_DURATION = timedelta(minutes=15)
 
 
 def get_cached(key):
-    """Check if we have fresh cached data"""
     if key in cache:
         data, timestamp = cache[key]
         if datetime.now() - timestamp < CACHE_DURATION:
@@ -50,59 +42,58 @@ def get_cached(key):
 
 
 def set_cache(key, data):
-    """Store data in cache with current timestamp"""
     cache[key] = (data, datetime.now())
 
 
 # ─────────────────────────────────────────
-# ROOT ENDPOINT
+# ROOT
 # ─────────────────────────────────────────
 @app.get("/")
 def root():
     return {
         "message": "Welcome to QuantEdge API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "status": "running"
+    }
+
+
+# ─────────────────────────────────────────
+# HEALTH CHECK
+# ─────────────────────────────────────────
+@app.get("/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "models_cached": list(model_cache.keys())
     }
 
 
 # ─────────────────────────────────────────
 # STOCK ENDPOINT
 # GET /stock/{ticker}
-# Returns price history + current quote
-# Example: /stock/AAPL
 # ─────────────────────────────────────────
 @app.get("/stock/{ticker}")
 def get_stock(ticker: str, period: str = "3mo"):
-    """
-    Fetch stock data for a given ticker symbol
-    - ticker: stock symbol (e.g. AAPL, MSFT)
-    - period: time period (1mo, 3mo, 6mo, 1y, 2y)
-    """
-
     ticker = ticker.upper()
     cache_key = f"stock_{ticker}_{period}"
 
-    # Check cache first
     cached = get_cached(cache_key)
     if cached:
         print(f"Cache hit for {ticker}")
         return cached
 
     try:
-        # Fetch data using yfinance
         stock = yf.Ticker(ticker)
-        hist = stock.history(period=period)
-        info = stock.fast_info
+        hist  = stock.history(period=period)
+        info  = stock.fast_info
 
-        # Check if ticker is valid
         if hist.empty:
             raise HTTPException(
                 status_code=404,
                 detail=f"No data found for ticker: {ticker}"
             )
 
-        # Format price history for frontend chart
         history = []
         for date, row in hist.iterrows():
             history.append({
@@ -114,7 +105,6 @@ def get_stock(ticker: str, period: str = "3mo"):
                 "volume": int(row["Volume"]),
             })
 
-        # Build response object
         response = {
             "ticker": ticker,
             "price": round(float(info.last_price), 2),
@@ -129,95 +119,69 @@ def get_stock(ticker: str, period: str = "3mo"):
             "history": history,
         }
 
-        # Store in cache
         set_cache(cache_key, response)
-
         return response
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching stock data: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─────────────────────────────────────────
-# PREDICT ENDPOINT
+# ML PREDICT ENDPOINT
 # GET /predict/{ticker}
-# Returns simple price prediction
-# (We'll upgrade this with ML in Phase 5)
+# Trains model if not cached, then predicts
 # ─────────────────────────────────────────
 @app.get("/predict/{ticker}")
-def predict_stock(ticker: str):
+def predict_stock(ticker: str, model_type: str = "random_forest"):
     """
-    Simple price prediction using moving averages
-    Will be upgraded to ML model in Phase 5
+    Predict next day's price using ML
+    - First call: trains the model (takes ~10 seconds)
+    - Subsequent calls: uses cached model (instant)
     """
 
     ticker = ticker.upper()
-    cache_key = f"predict_{ticker}"
-
-    cached = get_cached(cache_key)
-    if cached:
-        return cached
+    model_key = f"{ticker}_{model_type}"
 
     try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="3mo")
-
-        if hist.empty:
-            raise HTTPException(status_code=404, detail=f"No data for {ticker}")
-
-        closes = hist["Close"].values
-
-        # Simple moving averages
-        sma_7  = round(float(np.mean(closes[-7:])), 2)   # 7-day average
-        sma_30 = round(float(np.mean(closes[-30:])), 2)  # 30-day average
-
-        current_price = round(float(closes[-1]), 2)
-
-        # Simple signal logic
-        # If short-term average > long-term average = bullish trend
-        if sma_7 > sma_30:
-            signal = "BUY"
-            confidence = round(((sma_7 - sma_30) / sma_30) * 100, 2)
+        # Train model if not already cached
+        if model_key not in model_cache:
+            print(f"Training new model for {ticker}...")
+            model_data = train_model(ticker, model_type)
+            model_cache[model_key] = model_data
         else:
-            signal = "SELL"
-            confidence = round(((sma_30 - sma_7) / sma_30) * 100, 2)
+            print(f"Using cached model for {ticker}")
+            model_data = model_cache[model_key]
 
-        # Naive next-day prediction (will improve in Phase 5)
-        predicted_price = round(current_price * (1 + (sma_7 - sma_30) / sma_30 * 0.1), 2)
+        # Make prediction
+        prediction = predict_next_price(ticker, model_data)
+        return prediction
 
-        response = {
-            "ticker": ticker,
-            "current_price": current_price,
-            "predicted_price": predicted_price,
-            "signal": signal,
-            "confidence": min(confidence, 99.0),
-            "sma_7": sma_7,
-            "sma_30": sma_30,
-            "note": "Simple SMA model — ML upgrade coming in Phase 5"
-        }
-
-        set_cache(cache_key, response)
-        return response
-
-    except HTTPException:
-        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Prediction error: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ─────────────────────────────────────────
-# HEALTH CHECK ENDPOINT
-# GET /health
-# Used to verify backend is running
+# MODEL INFO ENDPOINT
+# GET /model/{ticker}
+# Returns info about the trained model
 # ─────────────────────────────────────────
-@app.get("/health")
-def health_check():
-    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+@app.get("/model/{ticker}")
+def get_model_info(ticker: str, model_type: str = "random_forest"):
+    ticker = ticker.upper()
+    model_key = f"{ticker}_{model_type}"
+
+    if model_key not in model_cache:
+        return {"message": f"No model trained for {ticker} yet. Call /predict/{ticker} first."}
+
+    model_data = model_cache[model_key]
+    return {
+        "ticker": ticker,
+        "model_type": model_data["model_type"],
+        "mae": model_data["mae"],
+        "r2": model_data["r2"],
+        "trained_at": model_data["trained_at"],
+    }
