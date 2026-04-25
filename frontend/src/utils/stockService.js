@@ -1,34 +1,35 @@
 // stockService.js
-// All stock data fetching logic lives here
-// This is the "service layer" pattern used in production apps
-
 import axios from 'axios'
 
 const API_KEY = import.meta.env.VITE_ALPHA_VANTAGE_KEY
 const BASE_URL = 'https://www.alphavantage.co/query'
 
-// ─────────────────────────────────────────
-// Fetch daily price history for a stock
-// Returns array of { date, open, high, low, close, volume }
-// ─────────────────────────────────────────
 export async function fetchStockHistory(ticker) {
   try {
     const response = await axios.get(BASE_URL, {
       params: {
         function: 'TIME_SERIES_DAILY',
         symbol: ticker,
-        outputsize: 'compact',  // last 100 days
+        outputsize: 'compact',
         apikey: API_KEY,
       }
     })
 
-    const timeSeries = response.data['Time Series (Daily)']
-
-    if (!timeSeries) {
-      throw new Error('Invalid ticker or API limit reached')
+    // ✅ Check for API limit message
+    if (response.data['Information']) {
+      throw new Error('API_LIMIT')
     }
 
-    // Convert the object into a sorted array
+    // ✅ Check for invalid ticker
+    if (response.data['Error Message']) {
+      throw new Error('INVALID_TICKER')
+    }
+
+    const timeSeries = response.data['Time Series (Daily)']
+    if (!timeSeries) {
+      throw new Error('NO_DATA')
+    }
+
     const formatted = Object.entries(timeSeries)
       .map(([date, values]) => ({
         date,
@@ -38,20 +39,15 @@ export async function fetchStockHistory(ticker) {
         close: parseFloat(values['4. close']),
         volume: parseInt(values['5. volume']),
       }))
-      .reverse() // oldest to newest for chart
+      .reverse()
 
     return formatted
 
   } catch (error) {
-    console.error('Error fetching stock history:', error)
     throw error
   }
 }
 
-// ─────────────────────────────────────────
-// Fetch current quote for a stock
-// Returns { price, change, changePercent, volume }
-// ─────────────────────────────────────────
 export async function fetchStockQuote(ticker) {
   try {
     const response = await axios.get(BASE_URL, {
@@ -62,10 +58,19 @@ export async function fetchStockQuote(ticker) {
       }
     })
 
-    const quote = response.data['Global Quote']
+    // ✅ Check for API limit message
+    if (response.data['Information']) {
+      throw new Error('API_LIMIT')
+    }
 
+    // ✅ Check for invalid ticker
+    if (response.data['Error Message']) {
+      throw new Error('INVALID_TICKER')
+    }
+
+    const quote = response.data['Global Quote']
     if (!quote || !quote['05. price']) {
-      throw new Error('Invalid ticker or API limit reached')
+      throw new Error('NO_DATA')
     }
 
     return {
@@ -79,7 +84,6 @@ export async function fetchStockQuote(ticker) {
     }
 
   } catch (error) {
-    console.error('Error fetching stock quote:', error)
     throw error
   }
 }
