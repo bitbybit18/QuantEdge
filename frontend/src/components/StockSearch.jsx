@@ -1,18 +1,18 @@
 // StockSearch.jsx
-// Now connects to real Alpha Vantage API
-
 import { useState } from 'react'
-import { fetchStockHistory, fetchStockQuote } from '../utils/stockService'
+import axios from 'axios'
 import PriceChart from './PriceChart'
 import StockInfo from './StockInfo'
 
+const BASE_URL = 'http://127.0.0.1:8000'
+
 function StockSearch({ onTickerChange }) {
-  const [ticker, setTicker] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [ticker, setTicker]       = useState('')
+  const [loading, setLoading]     = useState(false)
+  const [error, setError]         = useState('')
   const [chartData, setChartData] = useState(null)
-  const [quote, setQuote] = useState(null)
-  const [activePeriod, setActivePeriod] = useState('1M')
+  const [quote, setQuote]         = useState(null)
+  const [activePeriod, setActivePeriod] = useState('3M')
 
   const handleSearch = async () => {
     if (ticker.trim() === '') return
@@ -21,20 +21,33 @@ function StockSearch({ onTickerChange }) {
     setError('')
     setChartData(null)
     setQuote(null)
-    onTickerChange(ticker.toUpperCase())
 
     try {
-      // Fetch both at the same time (faster!)
-      const [history, quoteData] = await Promise.all([
-        fetchStockHistory(ticker.toUpperCase()),
-        fetchStockQuote(ticker.toUpperCase()),
-      ])
+      const response = await axios.get(
+  `${BASE_URL}/stock/${ticker.toUpperCase()}`,
+  { params: { period: '1y' } }  // ← fetch 1 year always
+)
+      const data = response.data
 
-      setChartData(history)
-      setQuote(quoteData)
+      // Set quote info
+      setQuote({
+        ticker: data.ticker,
+        price: data.price.toFixed(2),
+        change: data.change.toFixed(2),
+        changePercent: `${data.changePercent}%`,
+        volume: data.volume.toLocaleString(),
+        high: data.high.toFixed(2),
+        low: data.low.toFixed(2),
+      })
+
+      // Set chart data
+      setChartData(data.history)
+
+      // Tell Dashboard which ticker is active
+      if (onTickerChange) onTickerChange(ticker.toUpperCase())
 
     } catch (err) {
-      setError('Could not fetch data. Check ticker or API limit.')
+      setError('Could not fetch data. Check ticker symbol.')
     } finally {
       setLoading(false)
     }
@@ -44,13 +57,20 @@ function StockSearch({ onTickerChange }) {
     if (e.key === 'Enter') handleSearch()
   }
 
-  // Filter data based on selected period
-  const getFilteredData = () => {
-    if (!chartData) return []
-    const periodMap = { '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 }
-    const days = periodMap[activePeriod] || 30
-    return chartData.slice(-days)
+  // Filter chart data by selected period
+  // Filter chart data by selected period
+const getFilteredData = () => {
+  if (!chartData) return []
+  const periodMap = { 
+    '1W': 7, 
+    '1M': 30, 
+    '3M': 90, 
+    '6M': 180, 
+    '1Y': 365 
   }
+  const days = periodMap[activePeriod] || 90
+  return chartData.slice(-days)
+}
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
@@ -75,7 +95,7 @@ function StockSearch({ onTickerChange }) {
         </button>
       </div>
 
-      {/* Error Message */}
+      {/* Error */}
       {error && (
         <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 mb-4">
           <p className="text-red-400 text-sm">⚠️ {error}</p>
@@ -93,7 +113,7 @@ function StockSearch({ onTickerChange }) {
       {/* Stock Info + Chart */}
       {quote && chartData && !loading && (
         <>
-          {/* Stock header */}
+          {/* Header row */}
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-white text-xl font-bold">{quote.ticker}</h2>

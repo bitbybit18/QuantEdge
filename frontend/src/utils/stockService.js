@@ -5,7 +5,7 @@
 import axios from 'axios'
 
 // Our backend URL
-const BASE_URL = 'http://localhost:8000'
+const BASE_URL = 'http://127.0.0.1:8000'
 
 // ─────────────────────────────────────────
 // Fetch stock history + quote from our backend

@@ -7,6 +7,8 @@ import yfinance as yf
 import numpy as np
 from datetime import datetime, timedelta
 from ml_model import train_model, predict_next_price
+# Add this with the other imports at the top of main.py
+from sentiment import fetch_news, analyze_sentiment, get_company_name
 
 # ─────────────────────────────────────────
 # Initialize app
@@ -178,6 +180,54 @@ def get_model_info(ticker: str, model_type: str = "random_forest"):
         return {"message": f"No model trained for {ticker} yet. Call /predict/{ticker} first."}
 
     model_data = model_cache[model_key]
+    # ─────────────────────────────────────────
+# SENTIMENT ENDPOINT
+# GET /sentiment/{ticker}
+# Returns news sentiment analysis
+# ─────────────────────────────────────────
+@app.get("/sentiment/{ticker}")
+def get_sentiment(ticker: str):
+    """
+    Fetches recent news and analyzes sentiment using FinBERT
+    First call downloads FinBERT (~500MB) — subsequent calls are fast
+    """
+
+    ticker = ticker.upper()
+    cache_key = f"sentiment_{ticker}"
+
+    # Check cache (sentiment cached for 30 mins)
+    cached = get_cached(cache_key)
+    if cached:
+        return cached
+
+    try:
+        company_name = get_company_name(ticker)
+
+        # Fetch news articles
+        articles = fetch_news(ticker, company_name)
+
+        if not articles:
+            return {
+                "ticker": ticker,
+                "overall": "neutral",
+                "score": 0,
+                "message": "No recent news found",
+                "articles": []
+            }
+
+        # Run sentiment analysis
+        sentiment_data = analyze_sentiment(articles)
+        sentiment_data["ticker"] = ticker
+        sentiment_data["company"] = company_name
+        sentiment_data["analyzed_at"] = datetime.now().isoformat()
+
+        set_cache(cache_key, sentiment_data)
+        return sentiment_data
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     return {
         "ticker": ticker,
         "model_type": model_data["model_type"],
