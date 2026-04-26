@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from ml_model import train_model, predict_next_price
 # Add this with the other imports at the top of main.py
 from sentiment import fetch_news, analyze_sentiment, get_company_name
+from signals import generate_signals
 
 # ─────────────────────────────────────────
 # Initialize app
@@ -235,3 +236,30 @@ def get_sentiment(ticker: str):
         "r2": model_data["r2"],
         "trained_at": model_data["trained_at"],
     }
+# ─────────────────────────────────────────
+# SIGNALS ENDPOINT
+# GET /signals/{ticker}
+# Returns SMA, EMA, RSI trading signals
+# ─────────────────────────────────────────
+@app.get("/signals/{ticker}")
+def get_signals(ticker: str):
+    """
+    Calculate trading signals for a stock
+    Returns SMA cross, RSI, MACD signals
+    """
+    ticker = ticker.upper()
+    cache_key = f"signals_{ticker}"
+
+    cached = get_cached(cache_key)
+    if cached:
+        return cached
+
+    try:
+        result = generate_signals(ticker)
+        set_cache(cache_key, result)
+        return result
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
