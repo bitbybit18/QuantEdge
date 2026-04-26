@@ -10,6 +10,7 @@ from ml_model import train_model, predict_next_price
 # Add this with the other imports at the top of main.py
 from sentiment import fetch_news, analyze_sentiment, get_company_name
 from signals import generate_signals
+from risk import analyze_risk
 
 # ─────────────────────────────────────────
 # Initialize app
@@ -256,6 +257,32 @@ def get_signals(ticker: str):
 
     try:
         result = generate_signals(ticker)
+        set_cache(cache_key, result)
+        return result
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    # ─────────────────────────────────────────
+# RISK ENDPOINT
+# GET /risk/{ticker}
+# ─────────────────────────────────────────
+@app.get("/risk/{ticker}")
+def get_risk(ticker: str):
+    """
+    Calculate risk metrics for a stock
+    Returns volatility, sharpe, drawdown, VaR, beta
+    """
+    ticker    = ticker.upper()
+    cache_key = f"risk_{ticker}"
+
+    cached = get_cached(cache_key)
+    if cached:
+        return cached
+
+    try:
+        result = analyze_risk(ticker)
         set_cache(cache_key, result)
         return result
 
