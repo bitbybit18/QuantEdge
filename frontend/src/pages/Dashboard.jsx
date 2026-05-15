@@ -63,7 +63,7 @@ function Dashboard() {
           <div className="grid grid-cols-3 gap-3 mt-4">
             <div className="bg-gray-800 rounded-lg p-3 text-center">
               <p className="text-blue-400 font-bold text-lg">ML</p>
-              <p className="text-gray-500 text-xs">Random Forest</p>
+              <p className="text-gray-500 text-xs">XGBoost</p>
             </div>
             <div className="bg-gray-800 rounded-lg p-3 text-center">
               <p className="text-purple-400 font-bold text-lg">NLP</p>

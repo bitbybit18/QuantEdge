@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 
-const BASE_URL = 'http://127.0.0.1:8000'
+import BASE_URL from '../utils/config'
 
 function SentimentCard({ ticker }) {
   const [sentiment, setSentiment] = useState(null)

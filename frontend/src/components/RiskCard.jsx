@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 
-const BASE_URL = 'http://127.0.0.1:8000'
+import BASE_URL from '../utils/config'
 
 function RiskCard({ ticker }) {
   const [risk, setRisk]       = useState(null)

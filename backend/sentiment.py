@@ -202,6 +202,7 @@ TICKER_TO_COMPANY = {
     "NFLX":  "Netflix",
     "AMD":   "AMD",
     "INTC":  "Intel",
+     
 }
 
 def get_company_name(ticker: str):

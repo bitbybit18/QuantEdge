@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 
-const BASE_URL = 'http://localhost:8000'
+import BASE_URL from '../utils/config'
 
 function PredictionCard({ ticker }) {
   const [prediction, setPrediction] = useState(null)
@@ -65,7 +65,7 @@ function PredictionCard({ ticker }) {
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-white font-semibold">🤖 AI Prediction</h3>
         <span className="text-blue-400 text-xs font-medium bg-blue-900/30 px-2 py-1 rounded-full">
-          Random Forest
+           XGBoost
         </span>
       </div>
 
@@ -146,6 +146,30 @@ function PredictionCard({ ticker }) {
               </div>
             </div>
           </div>
+          {/* Top features */}
+{prediction.top_features && (
+  <div className="border border-gray-700 rounded-lg p-3">
+    <p className="text-gray-400 text-xs font-medium mb-2">
+      Top Predictive Features
+    </p>
+    {prediction.top_features.map((f, i) => (
+      <div key={i} className="flex items-center gap-2 mb-1">
+        <p className="text-gray-400 text-xs w-24 truncate capitalize">
+          {f.feature.replace(/_/g, ' ')}
+        </p>
+        <div className="flex-1 bg-gray-700 rounded-full h-1.5">
+          <div
+            className="bg-blue-500 h-1.5 rounded-full"
+            style={{ width: `${f.importance * 100}%` }}
+          />
+        </div>
+        <p className="text-gray-500 text-xs w-10 text-right">
+          {(f.importance * 100).toFixed(1)}%
+        </p>
+      </div>
+    ))}
+  </div>
+)}
 
           {/* Disclaimer */}
           <p className="text-gray-600 text-xs text-center">
